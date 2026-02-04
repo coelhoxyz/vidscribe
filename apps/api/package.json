@@ -1,0 +1,8 @@
+{
+  "name": "vidscribe-api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": ".venv/bin/uvicorn src.main:app --reload --port 8000"
+  }
+}
