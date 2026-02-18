@@ -2,7 +2,7 @@
   "name": "vidscribe",
   "version": "0.1.0",
   "private": true,
-  "description": "Open-source video transcription application",
+  "description": "Free open-source video transcription and subtitle generator powered by OpenAI Whisper. Transcribe videos, YouTube URLs, and audio files to text locally with SRT/VTT export. Supports 99 languages, GPU acceleration, and offline processing.",
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
