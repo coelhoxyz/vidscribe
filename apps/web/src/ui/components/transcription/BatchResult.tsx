@@ -131,6 +131,58 @@ function VideoResultItem({ transcription }: { transcription: Transcription }) {
   );
 }
 
+function downloadSingleFile(content: string, filename: string, type: string) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function downloadFiles(files: { content: string; filename: string }[]) {
+  if (files.length === 1) {
+    downloadSingleFile(files[0].content, files[0].filename, "text/plain");
+    return;
+  }
+
+  // Use File System Access API — user picks a folder, all files saved at once
+  if ("showDirectoryPicker" in window) {
+    try {
+      const dirHandle = await (window as any).showDirectoryPicker({ mode: "readwrite" });
+      for (const file of files) {
+        const fileHandle = await dirHandle.getFileHandle(file.filename, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(file.content);
+        await writable.close();
+      }
+      return;
+    } catch (e: any) {
+      if (e.name === "AbortError") return; // user cancelled
+      // fallback to sequential downloads
+    }
+  }
+
+  // Fallback for browsers without File System Access API
+  for (const file of files) {
+    downloadSingleFile(file.content, file.filename, "text/plain");
+    await new Promise((r) => setTimeout(r, 400));
+  }
+}
+
+function formatTranscriptionTxt(t: Transcription): string {
+  const metrics = [
+    t.views_count != null ? `${formatCount(t.views_count)} views` : null,
+    t.likes_count != null ? `${formatCount(t.likes_count)} likes` : null,
+    t.comments_count != null ? `${formatCount(t.comments_count)} comments` : null,
+  ].filter(Boolean).join(" · ");
+  const metricsLine = metrics ? `${metrics}\n\n` : "";
+  return `${metricsLine}${t.text}\n`;
+}
+
 export function BatchResult({
   batches,
   transcriptions,
@@ -138,58 +190,79 @@ export function BatchResult({
 }: BatchResultProps) {
   const completed = transcriptions.filter((t) => t.status === "completed");
   const failed = transcriptions.filter((t) => t.status === "failed");
-  const profileNames = batches.map((b) => `@${b.profile_username}`).join(", ");
-  const filePrefix = batches.map((b) => b.profile_username).join("_");
+  const isYoutube = batches.some((b) => b.profile_url === "youtube");
+  const profileNames = batches.map((b) =>
+    b.profile_url === "youtube" ? b.profile_username : `@${b.profile_username}`
+  ).join(", ");
 
-  const handleExportAll = () => {
-    const allText = completed
-      .map((t) => {
-        const metrics = [
-          t.views_count != null ? `${formatCount(t.views_count)} views` : null,
-          t.likes_count != null ? `${formatCount(t.likes_count)} likes` : null,
-          t.comments_count != null ? `${formatCount(t.comments_count)} comments` : null,
-        ].filter(Boolean).join(" · ");
-        const header = `--- ${t.source_name || t.id} ---`;
-        const metricsLine = metrics ? `${metrics}\n` : "";
-        return `${header}\n${metricsLine}\n${t.text}\n`;
-      })
-      .join("\n");
+  // Group completed transcriptions by source_name (owner username)
+  const groupedByOwner = completed.reduce<Record<string, Transcription[]>>((acc, t) => {
+    const key = t.source_name || t.id;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(t);
+    return acc;
+  }, {});
 
-    const blob = new Blob([allText], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `instagram_${filePrefix}_transcriptions.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleExport = async () => {
+    if (isYoutube) {
+      const files = completed.map((t) => ({
+        content: formatTranscriptionTxt(t),
+        filename: `${(t.source_name || t.id).replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 60)}.txt`,
+      }));
+      await downloadFiles(files);
+    } else {
+      const files = Object.entries(groupedByOwner).map(([owner, items]) => {
+        const content = items.map((t) => {
+          const header = `--- ${t.source_name || t.id} ---`;
+          return `${header}\n${formatTranscriptionTxt(t)}`;
+        }).join("\n");
+        const safeName = owner.replace(/[^a-zA-Z0-9._-]/g, "_");
+        return { content, filename: `${safeName}_transcriptions.txt` };
+      });
+      await downloadFiles(files);
+    }
   };
 
   const handleExportJson = async () => {
-    const results = [];
-    for (const t of completed) {
-      try {
-        const exported = await api.exportTranscription(t.id, "json");
-        results.push({
-          source_name: t.source_name,
-          views_count: t.views_count,
-          likes_count: t.likes_count,
-          comments_count: t.comments_count,
-          ...((exported.content as object) || {}),
-        });
-      } catch {
-        results.push({ source_name: t.source_name, text: t.text });
+    if (isYoutube) {
+      const files = [];
+      for (const t of completed) {
+        try {
+          const exported = await api.exportTranscription(t.id, "json");
+          const data = { source_name: t.source_name, ...((exported.content as object) || {}) };
+          files.push({
+            content: JSON.stringify(data, null, 2),
+            filename: `${(t.source_name || t.id).replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 60)}.json`,
+          });
+        } catch { /* skip */ }
       }
+      await downloadFiles(files);
+    } else {
+      const files = [];
+      for (const [owner, items] of Object.entries(groupedByOwner)) {
+        const results = [];
+        for (const t of items) {
+          try {
+            const exported = await api.exportTranscription(t.id, "json");
+            results.push({
+              source_name: t.source_name,
+              views_count: t.views_count,
+              likes_count: t.likes_count,
+              comments_count: t.comments_count,
+              ...((exported.content as object) || {}),
+            });
+          } catch {
+            results.push({ source_name: t.source_name, text: t.text });
+          }
+        }
+        const safeName = owner.replace(/[^a-zA-Z0-9._-]/g, "_");
+        files.push({
+          content: JSON.stringify(results, null, 2),
+          filename: `${safeName}_transcriptions.json`,
+        });
+      }
+      await downloadFiles(files);
     }
-
-    const blob = new Blob([JSON.stringify(results, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `instagram_${filePrefix}_transcriptions.json`;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   return (
@@ -221,10 +294,15 @@ export function BatchResult({
 
       {completed.length > 0 && (
         <div className="bg-[#1a1a1a] rounded-xl p-6">
-          <h3 className="text-white font-medium mb-4">Export All</h3>
+          <h3 className="text-white font-medium mb-3">
+            Export {isYoutube
+              ? `(${completed.length} file${completed.length > 1 ? "s" : ""})`
+              : `(${Object.keys(groupedByOwner).length} file${Object.keys(groupedByOwner).length > 1 ? "s" : ""}, by account)`
+            }
+          </h3>
           <div className="grid grid-cols-2 gap-3">
             <button
-              onClick={handleExportAll}
+              onClick={handleExport}
               className="flex items-center justify-center gap-2 px-4 py-3 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition-colors"
             >
               <Download size={16} />
