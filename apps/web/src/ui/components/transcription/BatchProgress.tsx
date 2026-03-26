@@ -15,27 +15,41 @@ import type {
 } from "@/domain/entities/Transcription";
 
 interface BatchProgressProps {
-  batch: BatchTranscription;
+  batches: BatchTranscription[];
   transcriptions: Transcription[];
 }
 
-const batchStatusLabels: Record<
-  string,
-  { label: string; icon: React.ReactNode }
-> = {
-  pending: {
-    label: "Starting...",
-    icon: <Loader2 className="animate-spin" />,
-  },
-  enumerating: {
-    label: "Finding videos on profile...",
-    icon: <Search />,
-  },
-  processing: {
-    label: "Transcribing videos...",
-    icon: <Mic />,
-  },
-};
+function statusIcon(status: string) {
+  switch (status) {
+    case "completed":
+      return <Check className="w-4 h-4 text-emerald-400" />;
+    case "failed":
+      return <X className="w-4 h-4 text-red-400" />;
+    case "enumerating":
+      return <Search className="w-4 h-4 text-purple-400 animate-pulse" />;
+    case "processing":
+      return <Mic className="w-4 h-4 text-pink-400 animate-pulse" />;
+    default:
+      return <Clock className="w-4 h-4 text-gray-600" />;
+  }
+}
+
+function statusLabel(status: string): string {
+  switch (status) {
+    case "pending":
+      return "Starting...";
+    case "enumerating":
+      return "Finding videos...";
+    case "processing":
+      return "Transcribing";
+    case "completed":
+      return "Done";
+    case "failed":
+      return "Failed";
+    default:
+      return status;
+  }
+}
 
 function VideoStatusIcon({ status }: { status: string }) {
   switch (status) {
@@ -53,7 +67,7 @@ function VideoStatusIcon({ status }: { status: string }) {
 }
 
 export function BatchProgress({
-  batch,
+  batches,
   transcriptions,
 }: BatchProgressProps) {
   const [dots, setDots] = useState("");
@@ -65,39 +79,60 @@ export function BatchProgress({
     return () => clearInterval(interval);
   }, []);
 
-  const statusInfo = batchStatusLabels[batch.status] || {
-    label: "Processing...",
-    icon: <Loader2 className="animate-spin" />,
-  };
-
-  const processed = batch.completed_videos + batch.failed_videos;
+  const totalVideos = batches.reduce((s, b) => s + b.total_videos, 0);
+  const processed = batches.reduce(
+    (s, b) => s + b.completed_videos + b.failed_videos,
+    0
+  );
+  const overallProgress = totalVideos > 0 ? (processed / totalVideos) * 100 : 0;
+  const anyActive = batches.some((b) =>
+    ["pending", "enumerating", "processing"].includes(b.status)
+  );
 
   return (
     <div className="bg-[#1a1a1a] rounded-xl p-8 space-y-6">
       <div className="flex flex-col items-center text-center">
         <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mb-6 text-white">
-          {statusInfo.icon}
+          {anyActive ? <Loader2 className="animate-spin" /> : <Check />}
         </div>
 
-        <h2 className="text-xl font-semibold text-white mb-1">
-          {statusInfo.label}
+        <h2 className="text-xl font-semibold text-white mb-4">
+          Processing {batches.length} profile{batches.length > 1 ? "s" : ""}
           {dots}
         </h2>
 
-        <p className="text-gray-400 mb-6">@{batch.profile_username}</p>
+        {/* Per-batch status */}
+        <div className="w-full max-w-md space-y-2 mb-6">
+          {batches.map((b) => (
+            <div
+              key={b.id}
+              className="flex items-center gap-3 px-4 py-2 bg-gray-800/50 rounded-lg"
+            >
+              {statusIcon(b.status)}
+              <span className="text-gray-300 text-sm flex-1 text-left">
+                @{b.profile_username}
+              </span>
+              <span className="text-gray-500 text-xs">
+                {b.status === "processing"
+                  ? `${b.completed_videos + b.failed_videos}/${b.total_videos}`
+                  : statusLabel(b.status)}
+              </span>
+            </div>
+          ))}
+        </div>
 
-        {batch.total_videos > 0 && (
+        {totalVideos > 0 && (
           <div className="w-full max-w-md">
             <div className="flex justify-between text-sm text-gray-400 mb-2">
               <span>
-                {processed} of {batch.total_videos} videos
+                {processed} of {totalVideos} videos
               </span>
-              <span>{Math.round(batch.progress)}%</span>
+              <span>{Math.round(overallProgress)}%</span>
             </div>
             <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-300 ease-out"
-                style={{ width: `${batch.progress}%` }}
+                style={{ width: `${overallProgress}%` }}
               />
             </div>
           </div>

@@ -1,34 +1,61 @@
 "use client";
 
 import { useState } from "react";
-import { Camera, Loader2, ArrowRight, Link2 } from "lucide-react";
+import { Camera, Loader2, ArrowRight, Link2, Plus, X } from "lucide-react";
+
+interface ProfileEntry {
+  url: string;
+  maxVideos: string;
+}
 
 interface InstagramInputProps {
-  onSubmit: (url: string, maxVideos?: number) => void;
+  onSubmit: (profiles: { url: string; maxVideos?: number }[]) => void;
   isLoading: boolean;
 }
 
 export function InstagramInput({ onSubmit, isLoading }: InstagramInputProps) {
-  const [url, setUrl] = useState("");
-  const [maxVideos, setMaxVideos] = useState("");
+  const [profiles, setProfiles] = useState<ProfileEntry[]>([
+    { url: "", maxVideos: "" },
+  ]);
   const [error, setError] = useState("");
+
+  const updateProfile = (index: number, field: keyof ProfileEntry, value: string) => {
+    setProfiles((prev) =>
+      prev.map((p, i) => (i === index ? { ...p, [field]: value } : p))
+    );
+  };
+
+  const addProfile = () => {
+    setProfiles((prev) => [...prev, { url: "", maxVideos: "" }]);
+  };
+
+  const removeProfile = (index: number) => {
+    if (profiles.length <= 1) return;
+    setProfiles((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
-    if (!url.trim()) {
-      setError("Enter an Instagram profile URL or username");
+    const valid = profiles.filter((p) => p.url.trim());
+    if (valid.length === 0) {
+      setError("Enter at least one Instagram profile URL or username");
       return;
     }
 
-    if (!isValidInstagramInput(url)) {
-      setError("Enter a valid Instagram URL or username");
+    const invalid = valid.find((p) => !isValidInstagramInput(p.url));
+    if (invalid) {
+      setError(`Invalid profile: "${invalid.url}"`);
       return;
     }
 
-    const max = maxVideos ? parseInt(maxVideos, 10) : undefined;
-    onSubmit(url, max);
+    onSubmit(
+      valid.map((p) => ({
+        url: p.url.trim(),
+        maxVideos: p.maxVideos ? parseInt(p.maxVideos, 10) : undefined,
+      }))
+    );
   };
 
   return (
@@ -39,48 +66,67 @@ export function InstagramInput({ onSubmit, isLoading }: InstagramInputProps) {
         </div>
         <div>
           <h3 className="text-white font-semibold text-lg">
-            Instagram Profile
+            Instagram Profiles
           </h3>
           <p className="text-gray-500 text-sm">
-            Download and transcribe all videos from a profile
+            Download and transcribe videos from one or more profiles
           </p>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="relative">
-          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
-            <Link2 size={18} />
+        {profiles.map((profile, index) => (
+          <div key={index} className="flex items-start gap-2">
+            <div className="flex-1 space-y-2">
+              <div className="relative">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+                  <Link2 size={18} />
+                </div>
+                <input
+                  type="text"
+                  value={profile.url}
+                  onChange={(e) => updateProfile(index, "url", e.target.value)}
+                  placeholder="https://instagram.com/username"
+                  disabled={isLoading}
+                  className="w-full pl-12 pr-4 py-3 input-modern rounded-xl text-white placeholder-gray-600 focus:outline-none text-sm"
+                />
+              </div>
+              <input
+                type="number"
+                value={profile.maxVideos}
+                onChange={(e) => updateProfile(index, "maxVideos", e.target.value)}
+                placeholder="Max videos (empty = all)"
+                min={1}
+                disabled={isLoading}
+                className="w-full px-4 py-2 input-modern rounded-lg text-white placeholder-gray-600 focus:outline-none text-sm"
+              />
+            </div>
+            {profiles.length > 1 && (
+              <button
+                type="button"
+                onClick={() => removeProfile(index)}
+                className="mt-3 p-2 text-gray-500 hover:text-red-400 transition-colors"
+                disabled={isLoading}
+              >
+                <X size={16} />
+              </button>
+            )}
           </div>
-          <input
-            type="text"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://instagram.com/username"
-            disabled={isLoading}
-            className="w-full pl-12 pr-4 py-4 input-modern rounded-xl text-white placeholder-gray-600 focus:outline-none"
-          />
-          {error && (
-            <p className="absolute -bottom-6 left-0 text-red-400 text-sm">
-              {error}
-            </p>
-          )}
-        </div>
+        ))}
 
-        <div className="pt-2">
-          <label className="text-gray-500 text-sm block mb-2">
-            Max videos (optional, leave empty for all)
-          </label>
-          <input
-            type="number"
-            value={maxVideos}
-            onChange={(e) => setMaxVideos(e.target.value)}
-            placeholder="e.g. 10"
-            min={1}
-            disabled={isLoading}
-            className="w-full px-4 py-3 input-modern rounded-xl text-white placeholder-gray-600 focus:outline-none"
-          />
-        </div>
+        {error && (
+          <p className="text-red-400 text-sm">{error}</p>
+        )}
+
+        <button
+          type="button"
+          onClick={addProfile}
+          disabled={isLoading}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-dashed border-gray-700 hover:border-gray-500 text-gray-400 hover:text-white rounded-xl transition-colors text-sm"
+        >
+          <Plus size={16} />
+          Add another profile
+        </button>
 
         <button
           type="submit"
@@ -114,10 +160,6 @@ export function InstagramInput({ onSubmit, isLoading }: InstagramInputProps) {
 
 function isValidInstagramInput(input: string): boolean {
   const trimmed = input.trim();
-  // Bare username
   if (/^[A-Za-z0-9._]+$/.test(trimmed)) return true;
-  // Instagram URL
-  return /^(https?:\/\/)?(www\.)?instagram\.com\/[A-Za-z0-9._]+\/?/.test(
-    trimmed
-  );
+  return /^(https?:\/\/)?(www\.)?instagram\.com\/[A-Za-z0-9._]+\/?/.test(trimmed);
 }

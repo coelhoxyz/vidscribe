@@ -8,19 +8,18 @@ import type {
 import { api } from "@/infrastructure/api/client";
 
 interface UseBatchTranscriptionReturn {
-  batch: BatchTranscription | null;
+  batches: BatchTranscription[];
   transcriptions: Transcription[];
   isLoading: boolean;
   error: string | null;
-  transcribeInstagramProfile: (
-    url: string,
-    maxVideos?: number
+  transcribeProfiles: (
+    profiles: { url: string; maxVideos?: number }[]
   ) => Promise<void>;
   reset: () => void;
 }
 
 export function useBatchTranscription(): UseBatchTranscriptionReturn {
-  const [batch, setBatch] = useState<BatchTranscription | null>(null);
+  const [batches, setBatches] = useState<BatchTranscription[]>([]);
   const [transcriptions, setTranscriptions] = useState<Transcription[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,16 +33,21 @@ export function useBatchTranscription(): UseBatchTranscriptionReturn {
   }, []);
 
   const startPolling = useCallback(
-    (id: string) => {
+    (ids: string[]) => {
       stopPolling();
       pollRef.current = setInterval(async () => {
         try {
-          const updated = await api.getBatchTranscription(id);
-          setBatch(updated);
+          const updatedBatches = await Promise.all(
+            ids.map((id) => api.getBatchTranscription(id))
+          );
+          setBatches(updatedBatches);
 
-          if (updated.transcription_ids.length > 0) {
+          const allTranscriptionIds = updatedBatches.flatMap(
+            (b) => b.transcription_ids
+          );
+          if (allTranscriptionIds.length > 0) {
             const results = await Promise.all(
-              updated.transcription_ids.map((tid) =>
+              allTranscriptionIds.map((tid) =>
                 api.getTranscription(tid).catch(() => null)
               )
             );
@@ -52,10 +56,10 @@ export function useBatchTranscription(): UseBatchTranscriptionReturn {
             );
           }
 
-          if (
-            updated.status === "completed" ||
-            updated.status === "failed"
-          ) {
+          const allDone = updatedBatches.every(
+            (b) => b.status === "completed" || b.status === "failed"
+          );
+          if (allDone) {
             stopPolling();
           }
         } catch {
@@ -66,17 +70,22 @@ export function useBatchTranscription(): UseBatchTranscriptionReturn {
     [stopPolling]
   );
 
-  const transcribeInstagramProfile = useCallback(
-    async (url: string, maxVideos?: number) => {
+  const transcribeProfiles = useCallback(
+    async (profiles: { url: string; maxVideos?: number }[]) => {
       setIsLoading(true);
       setError(null);
+      setBatches([]);
       setTranscriptions([]);
       stopPolling();
 
       try {
-        const result = await api.transcribeInstagramProfile(url, maxVideos);
-        setBatch(result);
-        startPolling(result.id);
+        const results = await Promise.all(
+          profiles.map((p) =>
+            api.transcribeInstagramProfile(p.url, p.maxVideos)
+          )
+        );
+        setBatches(results);
+        startPolling(results.map((r) => r.id));
       } catch (e) {
         setError(
           e instanceof Error ? e.message : "Failed to start Instagram batch"
@@ -90,7 +99,7 @@ export function useBatchTranscription(): UseBatchTranscriptionReturn {
 
   const reset = useCallback(() => {
     stopPolling();
-    setBatch(null);
+    setBatches([]);
     setTranscriptions([]);
     setError(null);
   }, [stopPolling]);
@@ -100,11 +109,11 @@ export function useBatchTranscription(): UseBatchTranscriptionReturn {
   }, [stopPolling]);
 
   return {
-    batch,
+    batches,
     transcriptions,
     isLoading,
     error,
-    transcribeInstagramProfile,
+    transcribeProfiles,
     reset,
   };
 }

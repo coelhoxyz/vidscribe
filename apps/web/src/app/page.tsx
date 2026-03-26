@@ -28,11 +28,11 @@ export default function Home() {
   } = useTranscription();
 
   const {
-    batch,
+    batches,
     transcriptions: batchTranscriptions,
     isLoading: batchLoading,
     error: batchError,
-    transcribeInstagramProfile,
+    transcribeProfiles,
     reset: resetBatch,
   } = useBatchTranscription();
 
@@ -44,8 +44,8 @@ export default function Home() {
     await transcribeYoutube(url);
   };
 
-  const handleInstagramSubmit = async (url: string, maxVideos?: number) => {
-    await transcribeInstagramProfile(url, maxVideos);
+  const handleInstagramSubmit = async (profiles: { url: string; maxVideos?: number }[]) => {
+    await transcribeProfiles(profiles);
   };
 
   const showResult = transcription?.status === "completed";
@@ -56,9 +56,11 @@ export default function Home() {
     );
 
   const showBatchProgress =
-    batch &&
-    ["pending", "enumerating", "processing"].includes(batch.status);
-  const showBatchResult = batch?.status === "completed" || batch?.status === "failed";
+    batches.length > 0 &&
+    batches.some((b) => ["pending", "enumerating", "processing"].includes(b.status));
+  const showBatchResult =
+    batches.length > 0 &&
+    batches.every((b) => b.status === "completed" || b.status === "failed");
 
   const showInput = !showProgress && !showResult && !showBatchProgress && !showBatchResult;
 
@@ -159,13 +161,13 @@ export default function Home() {
           <TranscriptionResult transcription={transcription} onReset={handleReset} />
         )}
 
-        {showBatchProgress && batch && (
-          <BatchProgress batch={batch} transcriptions={batchTranscriptions} />
+        {showBatchProgress && (
+          <BatchProgress batches={batches} transcriptions={batchTranscriptions} />
         )}
 
-        {showBatchResult && batch && (
+        {showBatchResult && (
           <BatchResult
-            batch={batch}
+            batches={batches}
             transcriptions={batchTranscriptions}
             onReset={handleReset}
           />
