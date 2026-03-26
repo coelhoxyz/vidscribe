@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Optional
 
 from pydantic_settings import BaseSettings
 
@@ -13,6 +14,7 @@ class Settings(BaseSettings):
     upload_dir: str = str(_BASE_DIR / "uploads")
     data_dir: str = str(_BASE_DIR / "data")
     models_dir: str = str(_BASE_DIR / "models")
+    apify_api_token: Optional[str] = None
 
     @property
     def cors_origins_list(self) -> list[str]:

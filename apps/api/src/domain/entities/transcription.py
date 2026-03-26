@@ -20,6 +20,7 @@ class TranscriptionStatus(str, Enum):
 class SourceType(str, Enum):
     UPLOAD = "upload"
     YOUTUBE = "youtube"
+    INSTAGRAM = "instagram"
 
 
 @dataclass

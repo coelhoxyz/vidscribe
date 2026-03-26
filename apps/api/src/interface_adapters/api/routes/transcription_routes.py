@@ -8,10 +8,15 @@ from pydantic import BaseModel
 
 from src.application.use_cases.transcribe_video import TranscribeVideoInput, TranscribeVideoUseCase
 from src.application.use_cases.transcribe_youtube import TranscribeYoutubeInput, TranscribeYoutubeUseCase
-from src.domain.entities import Transcription
+from src.application.use_cases.transcribe_instagram_profile import (
+    TranscribeInstagramProfileInput,
+    TranscribeInstagramProfileUseCase,
+)
+from src.domain.entities import BatchTranscription, Transcription
 from src.domain.entities.transcription import SourceType, VideoSource
 from src.infrastructure.config.settings import get_settings
-from src.infrastructure.persistence import InMemoryTranscriptionRepository
+from src.infrastructure.instagram import ApifyAdapter
+from src.infrastructure.persistence import InMemoryBatchTranscriptionRepository, InMemoryTranscriptionRepository
 from src.infrastructure.whisper import WhisperAdapter
 from src.infrastructure.youtube import YtdlpAdapter
 
@@ -19,8 +24,10 @@ router = APIRouter()
 
 settings = get_settings()
 repository = InMemoryTranscriptionRepository()
+batch_repository = InMemoryBatchTranscriptionRepository()
 whisper_service = WhisperAdapter(model_size=settings.whisper_model_size)
 youtube_downloader = YtdlpAdapter()
+instagram_lister = ApifyAdapter(api_token=settings.apify_api_token or "") if settings.apify_api_token else None
 
 
 class TranscriptionResponse(BaseModel):
@@ -35,6 +42,18 @@ class TranscriptionResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class BatchTranscriptionResponse(BaseModel):
+    id: str
+    status: str
+    profile_username: str
+    total_videos: int = 0
+    completed_videos: int = 0
+    failed_videos: int = 0
+    progress: float = 0.0
+    transcription_ids: list[str] = []
+    error: Optional[str] = None
 
 
 def transcription_to_response(t: Transcription) -> TranscriptionResponse:
@@ -198,3 +217,73 @@ def format_timestamp_vtt(seconds: float) -> str:
     secs = int(seconds % 60)
     millis = int((seconds - int(seconds)) * 1000)
     return f"{hours:02d}:{minutes:02d}:{secs:02d}.{millis:03d}"
+
+
+def batch_to_response(b: BatchTranscription) -> BatchTranscriptionResponse:
+    return BatchTranscriptionResponse(
+        id=str(b.id),
+        status=b.status.value,
+        profile_username=b.profile_username,
+        total_videos=b.total_videos,
+        completed_videos=b.completed_videos,
+        failed_videos=b.failed_videos,
+        progress=b.progress,
+        transcription_ids=[str(tid) for tid in b.transcription_ids],
+        error=b.error_message,
+    )
+
+
+@router.post("/transcriptions/batch/instagram", response_model=BatchTranscriptionResponse)
+async def create_instagram_batch(
+    background_tasks: BackgroundTasks,
+    profile_url: str = Form(...),
+    language: str = Form("auto"),
+    model_size: str = Form("base"),
+    max_videos: Optional[int] = Form(None),
+):
+    if not instagram_lister:
+        raise HTTPException(
+            status_code=503,
+            detail="Instagram batch transcription requires APIFY_API_TOKEN to be configured.",
+        )
+
+    try:
+        username = await instagram_lister.validate_profile_url(profile_url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    lang = language if language != "auto" else None
+
+    batch = BatchTranscription(
+        profile_url=profile_url,
+        profile_username=username,
+    )
+    await batch_repository.save(batch)
+
+    os.makedirs(settings.upload_dir, exist_ok=True)
+
+    use_case = TranscribeInstagramProfileUseCase(
+        profile_video_lister=instagram_lister,
+        video_downloader=youtube_downloader,
+        whisper_service=whisper_service,
+        transcription_repository=repository,
+        batch_repository=batch_repository,
+        upload_dir=settings.upload_dir,
+    )
+    input_data = TranscribeInstagramProfileInput(
+        profile_url=profile_url,
+        language=lang,
+        model_size=model_size,
+        max_videos=max_videos,
+    )
+    background_tasks.add_task(use_case.execute, batch.id, input_data)
+
+    return batch_to_response(batch)
+
+
+@router.get("/transcriptions/batch/{batch_id}", response_model=BatchTranscriptionResponse)
+async def get_batch_transcription(batch_id: UUID):
+    batch = await batch_repository.get(batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    return batch_to_response(batch)

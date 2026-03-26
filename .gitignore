@@ -11,6 +11,7 @@ env/
 dist/
 build/
 *.egg-info/
+*.tsbuildinfo
 
 # IDE
 .idea/
@@ -41,6 +42,9 @@ uploads/
 
 # Turbo
 .turbo/
+
+# Playwright
+.playwright-mcp/
 
 # Misc
 *.pem

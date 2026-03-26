@@ -1,3 +1,4 @@
 from src.infrastructure.persistence.memory_repository import InMemoryTranscriptionRepository
+from src.infrastructure.persistence.memory_batch_repository import InMemoryBatchTranscriptionRepository
 
-__all__ = ["InMemoryTranscriptionRepository"]
+__all__ = ["InMemoryTranscriptionRepository", "InMemoryBatchTranscriptionRepository"]
