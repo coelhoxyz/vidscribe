@@ -1,16 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { Upload, Play } from "lucide-react";
+import { Upload, Play, Camera } from "lucide-react";
 import { Header } from "@/ui/components/layout/Header";
 import { VideoUploader } from "@/ui/components/transcription/VideoUploader";
 import { YoutubeInput } from "@/ui/components/transcription/YoutubeInput";
+import { InstagramInput } from "@/ui/components/transcription/InstagramInput";
 import { TranscriptionProgress } from "@/ui/components/transcription/TranscriptionProgress";
 import { TranscriptionResult } from "@/ui/components/transcription/TranscriptionResult";
+import { BatchProgress } from "@/ui/components/transcription/BatchProgress";
+import { BatchResult } from "@/ui/components/transcription/BatchResult";
 import { BackendStatus } from "@/ui/components/common/BackendStatus";
 import { useTranscription } from "@/ui/hooks/useTranscription";
+import { useBatchTranscription } from "@/ui/hooks/useBatchTranscription";
 
-type Tab = "upload" | "youtube";
+type Tab = "upload" | "youtube" | "instagram";
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>("upload");
@@ -23,12 +27,25 @@ export default function Home() {
     reset,
   } = useTranscription();
 
+  const {
+    batch,
+    transcriptions: batchTranscriptions,
+    isLoading: batchLoading,
+    error: batchError,
+    transcribeInstagramProfile,
+    reset: resetBatch,
+  } = useBatchTranscription();
+
   const handleFileUpload = async (file: File) => {
     await transcribeFile(file);
   };
 
   const handleYoutubeSubmit = async (url: string) => {
     await transcribeYoutube(url);
+  };
+
+  const handleInstagramSubmit = async (url: string, maxVideos?: number) => {
+    await transcribeInstagramProfile(url, maxVideos);
   };
 
   const showResult = transcription?.status === "completed";
@@ -38,6 +55,20 @@ export default function Home() {
       transcription.status
     );
 
+  const showBatchProgress =
+    batch &&
+    ["pending", "enumerating", "processing"].includes(batch.status);
+  const showBatchResult = batch?.status === "completed" || batch?.status === "failed";
+
+  const showInput = !showProgress && !showResult && !showBatchProgress && !showBatchResult;
+
+  const currentError = activeTab === "instagram" ? batchError : error;
+
+  const handleReset = () => {
+    reset();
+    resetBatch();
+  };
+
   return (
     <div className="min-h-screen bg-[#030303] gradient-bg">
       <Header />
@@ -45,7 +76,7 @@ export default function Home() {
       <main className="container mx-auto px-4 py-12 max-w-3xl">
         <BackendStatus />
 
-        {!showProgress && !showResult && (
+        {showInput && (
           <>
             <div className="text-center mb-14">
               <div className="inline-flex items-center gap-2 px-4 py-2 glass rounded-full text-sm text-gray-400 mb-6">
@@ -56,7 +87,7 @@ export default function Home() {
                 Transcribe Videos<br />with AI
               </h1>
               <p className="text-gray-500 text-lg max-w-lg mx-auto leading-relaxed">
-                Upload a video file or paste a YouTube link.<br />
+                Upload a video file, paste a YouTube link, or transcribe an entire Instagram profile.<br />
                 <span className="text-gray-600">All processing happens locally on your machine.</span>
               </p>
             </div>
@@ -72,7 +103,7 @@ export default function Home() {
                   }`}
                 >
                   <Upload size={18} />
-                  Upload File
+                  Upload
                 </button>
                 <button
                   onClick={() => setActiveTab("youtube")}
@@ -83,20 +114,38 @@ export default function Home() {
                   }`}
                 >
                   <Play size={18} />
-                  YouTube URL
+                  YouTube
+                </button>
+                <button
+                  onClick={() => setActiveTab("instagram")}
+                  className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all duration-200 ${
+                    activeTab === "instagram"
+                      ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/20"
+                      : "text-gray-400 hover:text-white hover:bg-white/5"
+                  }`}
+                >
+                  <Camera size={18} />
+                  Instagram
                 </button>
               </div>
             </div>
 
-            {activeTab === "upload" ? (
+            {activeTab === "upload" && (
               <VideoUploader onUpload={handleFileUpload} isLoading={isLoading} />
-            ) : (
+            )}
+            {activeTab === "youtube" && (
               <YoutubeInput onSubmit={handleYoutubeSubmit} isLoading={isLoading} />
             )}
+            {activeTab === "instagram" && (
+              <InstagramInput
+                onSubmit={handleInstagramSubmit}
+                isLoading={batchLoading}
+              />
+            )}
 
-            {error && (
+            {currentError && (
               <div className="mt-6 p-4 glass rounded-xl border border-red-500/20 text-red-400 text-sm">
-                {error}
+                {currentError}
               </div>
             )}
           </>
@@ -107,7 +156,19 @@ export default function Home() {
         )}
 
         {showResult && transcription && (
-          <TranscriptionResult transcription={transcription} onReset={reset} />
+          <TranscriptionResult transcription={transcription} onReset={handleReset} />
+        )}
+
+        {showBatchProgress && batch && (
+          <BatchProgress batch={batch} transcriptions={batchTranscriptions} />
+        )}
+
+        {showBatchResult && batch && (
+          <BatchResult
+            batch={batch}
+            transcriptions={batchTranscriptions}
+            onReset={handleReset}
+          />
         )}
       </main>
     </div>

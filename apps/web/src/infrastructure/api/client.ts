@@ -1,4 +1,4 @@
-import type { Transcription } from "@/domain/entities/Transcription";
+import type { Transcription, BatchTranscription } from "@/domain/entities/Transcription";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -78,6 +78,36 @@ class ApiClient {
     return res.json();
   }
 
+  async transcribeInstagramProfile(
+    profileUrl: string,
+    maxVideos?: number
+  ): Promise<BatchTranscription> {
+    const formData = new FormData();
+    formData.append("profile_url", profileUrl);
+    if (maxVideos) {
+      formData.append("max_videos", String(maxVideos));
+    }
+
+    const res = await fetch(
+      `${this.baseUrl}/api/v1/transcriptions/batch/instagram`,
+      { method: "POST", body: formData }
+    );
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.detail || "Failed to start Instagram batch");
+    }
+
+    return res.json();
+  }
+
+  async getBatchTranscription(id: string): Promise<BatchTranscription> {
+    const res = await fetch(
+      `${this.baseUrl}/api/v1/transcriptions/batch/${id}`
+    );
+    if (!res.ok) throw new Error("Failed to get batch transcription");
+    return res.json();
+  }
 }
 
 export const api = new ApiClient(API_URL);
