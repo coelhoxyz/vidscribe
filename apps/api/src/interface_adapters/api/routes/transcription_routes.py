@@ -39,6 +39,9 @@ class TranscriptionResponse(BaseModel):
     text: Optional[str] = None
     language: Optional[str] = None
     error: Optional[str] = None
+    views_count: Optional[int] = None
+    likes_count: Optional[int] = None
+    comments_count: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -57,15 +60,23 @@ class BatchTranscriptionResponse(BaseModel):
 
 
 def transcription_to_response(t: Transcription) -> TranscriptionResponse:
+    if t.source.type == SourceType.INSTAGRAM and t.source.owner_username:
+        name = f"@{t.source.owner_username}"
+    else:
+        name = t.source.filename or t.source.title
+
     return TranscriptionResponse(
         id=str(t.id),
         status=t.status.value,
         source_type=t.source.type.value,
-        source_name=t.source.filename or t.source.title,
+        source_name=name,
         progress=t.progress,
         text=t.result.text if t.result else None,
         language=t.result.language if t.result else None,
         error=t.error_message,
+        views_count=t.source.views_count,
+        likes_count=t.source.likes_count,
+        comments_count=t.source.comments_count,
     )
 
 

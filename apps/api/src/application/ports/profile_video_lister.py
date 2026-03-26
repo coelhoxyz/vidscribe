@@ -8,8 +8,13 @@ from typing import Optional
 class ProfileVideoInfo:
     url: str
     title: str
+    owner_username: Optional[str] = None
     duration_seconds: Optional[float] = None
     posted_at: Optional[datetime] = None
+    views_count: Optional[int] = None
+    likes_count: Optional[int] = None
+    comments_count: Optional[int] = None
+    direct_video_url: Optional[str] = None
 
 
 class ProfileVideoLister(ABC):

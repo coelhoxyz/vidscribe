@@ -16,6 +16,9 @@ export interface Transcription {
   text?: string;
   language?: string;
   error?: string;
+  views_count?: number;
+  likes_count?: number;
+  comments_count?: number;
 }
 
 export type BatchStatus =

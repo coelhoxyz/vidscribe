@@ -38,15 +38,15 @@ class ApifyAdapter(ProfileVideoLister):
         max_videos: Optional[int] = None,
     ) -> list[ProfileVideoInfo]:
         username = await self.validate_profile_url(profile_url)
-        limit = max_videos or 20
 
-        payload = {
+        payload: dict = {
             "directUrls": [f"https://www.instagram.com/{username}/"],
             "resultsType": "posts",
-            "resultsLimit": limit,
             "searchType": "user",
             "searchLimit": 1,
         }
+        if max_videos:
+            payload["resultsLimit"] = max_videos
 
         url = f"{_APIFY_BASE_URL}/acts/{_ACTOR_ID}/run-sync-get-dataset-items"
 
@@ -75,12 +75,19 @@ class ApifyAdapter(ProfileVideoLister):
             shortcode = item.get("shortCode", "")
             post_url = item.get("url") or f"https://www.instagram.com/p/{shortcode}/"
 
+            owner = item.get("ownerUsername", username)
+
             videos.append(
                 ProfileVideoInfo(
                     url=post_url,
                     title=item.get("caption", shortcode)[:80] if item.get("caption") else shortcode,
+                    owner_username=owner,
                     duration_seconds=item.get("videoDuration"),
                     posted_at=None,
+                    views_count=item.get("videoPlayCount") or item.get("videoViewCount"),
+                    likes_count=item.get("likesCount"),
+                    comments_count=item.get("commentsCount"),
+                    direct_video_url=item.get("videoUrl"),
                 )
             )
 

@@ -9,6 +9,9 @@ import {
   ChevronDown,
   ChevronUp,
   AlertCircle,
+  Eye,
+  Heart,
+  MessageCircle,
 } from "lucide-react";
 import type {
   BatchTranscription,
@@ -17,9 +20,40 @@ import type {
 import { api } from "@/infrastructure/api/client";
 
 interface BatchResultProps {
-  batch: BatchTranscription;
+  batches: BatchTranscription[];
   transcriptions: Transcription[];
   onReset: () => void;
+}
+
+function formatCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+function VideoMetrics({ transcription }: { transcription: Transcription }) {
+  const has = transcription.views_count || transcription.likes_count || transcription.comments_count;
+  if (!has) return null;
+
+  return (
+    <div className="flex items-center gap-4 text-xs text-gray-500">
+      {transcription.views_count != null && (
+        <span className="flex items-center gap-1">
+          <Eye size={12} /> {formatCount(transcription.views_count)}
+        </span>
+      )}
+      {transcription.likes_count != null && (
+        <span className="flex items-center gap-1">
+          <Heart size={12} /> {formatCount(transcription.likes_count)}
+        </span>
+      )}
+      {transcription.comments_count != null && (
+        <span className="flex items-center gap-1">
+          <MessageCircle size={12} /> {formatCount(transcription.comments_count)}
+        </span>
+      )}
+    </div>
+  );
 }
 
 function VideoResultItem({ transcription }: { transcription: Transcription }) {
@@ -63,7 +97,8 @@ function VideoResultItem({ transcription }: { transcription: Transcription }) {
 
       {expanded && transcription.text && (
         <div className="px-4 pb-4 border-t border-gray-700/50">
-          <div className="flex justify-end mt-2 mb-2">
+          <div className="flex items-center justify-between mt-2 mb-2">
+            <VideoMetrics transcription={transcription} />
             <button
               onClick={handleCopy}
               className="flex items-center gap-1.5 px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-white rounded-md transition-colors"
@@ -97,26 +132,34 @@ function VideoResultItem({ transcription }: { transcription: Transcription }) {
 }
 
 export function BatchResult({
-  batch,
+  batches,
   transcriptions,
   onReset,
 }: BatchResultProps) {
   const completed = transcriptions.filter((t) => t.status === "completed");
   const failed = transcriptions.filter((t) => t.status === "failed");
+  const profileNames = batches.map((b) => `@${b.profile_username}`).join(", ");
+  const filePrefix = batches.map((b) => b.profile_username).join("_");
 
   const handleExportAll = () => {
     const allText = completed
-      .map(
-        (t) =>
-          `--- ${t.source_name || t.id} ---\n\n${t.text}\n`
-      )
+      .map((t) => {
+        const metrics = [
+          t.views_count != null ? `${formatCount(t.views_count)} views` : null,
+          t.likes_count != null ? `${formatCount(t.likes_count)} likes` : null,
+          t.comments_count != null ? `${formatCount(t.comments_count)} comments` : null,
+        ].filter(Boolean).join(" · ");
+        const header = `--- ${t.source_name || t.id} ---`;
+        const metricsLine = metrics ? `${metrics}\n` : "";
+        return `${header}\n${metricsLine}\n${t.text}\n`;
+      })
       .join("\n");
 
     const blob = new Blob([allText], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `instagram_${batch.profile_username}_transcriptions.txt`;
+    a.download = `instagram_${filePrefix}_transcriptions.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -128,6 +171,9 @@ export function BatchResult({
         const exported = await api.exportTranscription(t.id, "json");
         results.push({
           source_name: t.source_name,
+          views_count: t.views_count,
+          likes_count: t.likes_count,
+          comments_count: t.comments_count,
           ...((exported.content as object) || {}),
         });
       } catch {
@@ -141,7 +187,7 @@ export function BatchResult({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `instagram_${batch.profile_username}_transcriptions.json`;
+    a.download = `instagram_${filePrefix}_transcriptions.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -154,7 +200,7 @@ export function BatchResult({
             Batch Complete
           </h2>
           <p className="text-gray-400">
-            @{batch.profile_username} &mdash; {completed.length} transcribed
+            {profileNames} &mdash; {completed.length} transcribed
             {failed.length > 0 && `, ${failed.length} failed`}
           </p>
         </div>

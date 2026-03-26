@@ -29,8 +29,12 @@ class VideoSource:
     filename: Optional[str] = None
     url: Optional[str] = None
     title: Optional[str] = None
+    owner_username: Optional[str] = None
     duration_seconds: Optional[float] = None
     size_bytes: Optional[int] = None
+    views_count: Optional[int] = None
+    likes_count: Optional[int] = None
+    comments_count: Optional[int] = None
 
 
 @dataclass
