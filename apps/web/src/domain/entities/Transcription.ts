@@ -32,6 +32,7 @@ export type BatchStatus =
 export interface BatchTranscription {
   id: string;
   status: BatchStatus;
+  profile_url: string;
   profile_username: string;
   total_videos: number;
   completed_videos: number;

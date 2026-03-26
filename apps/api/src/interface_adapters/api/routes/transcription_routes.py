@@ -12,6 +12,10 @@ from src.application.use_cases.transcribe_instagram_profile import (
     TranscribeInstagramProfileInput,
     TranscribeInstagramProfileUseCase,
 )
+from src.application.use_cases.transcribe_youtube_batch import (
+    TranscribeYoutubeBatchInput,
+    TranscribeYoutubeBatchUseCase,
+)
 from src.domain.entities import BatchTranscription, Transcription
 from src.domain.entities.transcription import SourceType, VideoSource
 from src.infrastructure.config.settings import get_settings
@@ -50,6 +54,7 @@ class TranscriptionResponse(BaseModel):
 class BatchTranscriptionResponse(BaseModel):
     id: str
     status: str
+    profile_url: str = ""
     profile_username: str
     total_videos: int = 0
     completed_videos: int = 0
@@ -234,6 +239,7 @@ def batch_to_response(b: BatchTranscription) -> BatchTranscriptionResponse:
     return BatchTranscriptionResponse(
         id=str(b.id),
         status=b.status.value,
+        profile_url=b.profile_url,
         profile_username=b.profile_username,
         total_videos=b.total_videos,
         completed_videos=b.completed_videos,
@@ -286,6 +292,45 @@ async def create_instagram_batch(
         language=lang,
         model_size=model_size,
         max_videos=max_videos,
+    )
+    background_tasks.add_task(use_case.execute, batch.id, input_data)
+
+    return batch_to_response(batch)
+
+
+@router.post("/transcriptions/batch/youtube", response_model=BatchTranscriptionResponse)
+async def create_youtube_batch(
+    background_tasks: BackgroundTasks,
+    urls: str = Form(...),
+    language: str = Form("auto"),
+    model_size: str = Form("base"),
+):
+    url_list = [u.strip() for u in urls.split("\n") if u.strip()]
+    if not url_list:
+        raise HTTPException(status_code=400, detail="Provide at least one YouTube URL")
+
+    lang = language if language != "auto" else None
+    label = f"{len(url_list)} YouTube videos"
+
+    batch = BatchTranscription(
+        profile_url="youtube",
+        profile_username=label,
+    )
+    await batch_repository.save(batch)
+
+    os.makedirs(settings.upload_dir, exist_ok=True)
+
+    use_case = TranscribeYoutubeBatchUseCase(
+        video_downloader=youtube_downloader,
+        whisper_service=whisper_service,
+        transcription_repository=repository,
+        batch_repository=batch_repository,
+        upload_dir=settings.upload_dir,
+    )
+    input_data = TranscribeYoutubeBatchInput(
+        urls=url_list,
+        language=lang,
+        model_size=model_size,
     )
     background_tasks.add_task(use_case.execute, batch.id, input_data)
 

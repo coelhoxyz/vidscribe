@@ -15,6 +15,7 @@ interface UseBatchTranscriptionReturn {
   transcribeProfiles: (
     profiles: { url: string; maxVideos?: number }[]
   ) => Promise<void>;
+  transcribeYoutubeUrls: (urls: string[]) => Promise<void>;
   reset: () => void;
 }
 
@@ -88,7 +89,30 @@ export function useBatchTranscription(): UseBatchTranscriptionReturn {
         startPolling(results.map((r) => r.id));
       } catch (e) {
         setError(
-          e instanceof Error ? e.message : "Failed to start Instagram batch"
+          e instanceof Error ? e.message : "Failed to start batch"
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [stopPolling, startPolling]
+  );
+
+  const transcribeYoutubeUrls = useCallback(
+    async (urls: string[]) => {
+      setIsLoading(true);
+      setError(null);
+      setBatches([]);
+      setTranscriptions([]);
+      stopPolling();
+
+      try {
+        const result = await api.transcribeYoutubeBatch(urls);
+        setBatches([result]);
+        startPolling([result.id]);
+      } catch (e) {
+        setError(
+          e instanceof Error ? e.message : "Failed to start batch"
         );
       } finally {
         setIsLoading(false);
@@ -114,6 +138,7 @@ export function useBatchTranscription(): UseBatchTranscriptionReturn {
     isLoading,
     error,
     transcribeProfiles,
+    transcribeYoutubeUrls,
     reset,
   };
 }

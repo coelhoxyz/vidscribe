@@ -101,6 +101,23 @@ class ApiClient {
     return res.json();
   }
 
+  async transcribeYoutubeBatch(urls: string[]): Promise<BatchTranscription> {
+    const formData = new FormData();
+    formData.append("urls", urls.join("\n"));
+
+    const res = await fetch(
+      `${this.baseUrl}/api/v1/transcriptions/batch/youtube`,
+      { method: "POST", body: formData }
+    );
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.detail || "Failed to start YouTube batch");
+    }
+
+    return res.json();
+  }
+
   async getBatchTranscription(id: string): Promise<BatchTranscription> {
     const res = await fetch(
       `${this.baseUrl}/api/v1/transcriptions/batch/${id}`

@@ -33,6 +33,7 @@ export default function Home() {
     isLoading: batchLoading,
     error: batchError,
     transcribeProfiles,
+    transcribeYoutubeUrls,
     reset: resetBatch,
   } = useBatchTranscription();
 
@@ -40,8 +41,12 @@ export default function Home() {
     await transcribeFile(file);
   };
 
-  const handleYoutubeSubmit = async (url: string) => {
-    await transcribeYoutube(url);
+  const handleYoutubeSubmit = async (urls: string[]) => {
+    if (urls.length === 1) {
+      await transcribeYoutube(urls[0]);
+    } else {
+      await transcribeYoutubeUrls(urls);
+    }
   };
 
   const handleInstagramSubmit = async (profiles: { url: string; maxVideos?: number }[]) => {
@@ -64,7 +69,7 @@ export default function Home() {
 
   const showInput = !showProgress && !showResult && !showBatchProgress && !showBatchResult;
 
-  const currentError = activeTab === "instagram" ? batchError : error;
+  const currentError = (activeTab === "instagram" || activeTab === "youtube") ? (batchError || error) : error;
 
   const handleReset = () => {
     reset();
@@ -136,7 +141,7 @@ export default function Home() {
               <VideoUploader onUpload={handleFileUpload} isLoading={isLoading} />
             )}
             {activeTab === "youtube" && (
-              <YoutubeInput onSubmit={handleYoutubeSubmit} isLoading={isLoading} />
+              <YoutubeInput onSubmit={handleYoutubeSubmit} isLoading={isLoading || batchLoading} />
             )}
             {activeTab === "instagram" && (
               <InstagramInput

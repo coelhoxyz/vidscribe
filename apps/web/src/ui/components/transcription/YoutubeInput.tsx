@@ -1,32 +1,47 @@
 "use client";
 
 import { useState } from "react";
-import { Play, Loader2, ArrowRight, Link2 } from "lucide-react";
+import { Play, Loader2, ArrowRight, Link2, Plus, X } from "lucide-react";
 
 interface YoutubeInputProps {
-  onSubmit: (url: string) => void;
+  onSubmit: (urls: string[]) => void;
   isLoading: boolean;
 }
 
 export function YoutubeInput({ onSubmit, isLoading }: YoutubeInputProps) {
-  const [url, setUrl] = useState("");
+  const [urls, setUrls] = useState([""]);
   const [error, setError] = useState("");
+
+  const updateUrl = (index: number, value: string) => {
+    setUrls((prev) => prev.map((u, i) => (i === index ? value : u)));
+  };
+
+  const addUrl = () => {
+    setUrls((prev) => [...prev, ""]);
+  };
+
+  const removeUrl = (index: number) => {
+    if (urls.length <= 1) return;
+    setUrls((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
-    if (!url.trim()) {
-      setError("Please enter a YouTube URL");
+    const valid = urls.map((u) => u.trim()).filter(Boolean);
+    if (valid.length === 0) {
+      setError("Enter at least one YouTube URL");
       return;
     }
 
-    if (!isValidYoutubeUrl(url)) {
-      setError("Please enter a valid YouTube URL");
+    const invalid = valid.find((u) => !isValidYoutubeUrl(u));
+    if (invalid) {
+      setError(`Invalid URL: ${invalid}`);
       return;
     }
 
-    onSubmit(url);
+    onSubmit(valid);
   };
 
   return (
@@ -36,28 +51,55 @@ export function YoutubeInput({ onSubmit, isLoading }: YoutubeInputProps) {
           <Play className="w-6 h-6 text-white fill-white" />
         </div>
         <div>
-          <h3 className="text-white font-semibold text-lg">YouTube Video</h3>
-          <p className="text-gray-500 text-sm">Paste any YouTube video URL</p>
+          <h3 className="text-white font-semibold text-lg">YouTube Videos</h3>
+          <p className="text-gray-500 text-sm">
+            Paste one or more YouTube video URLs
+          </p>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
-        <div className="relative">
-          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
-            <Link2 size={18} />
+      <form onSubmit={handleSubmit} className="space-y-3">
+        {urls.map((url, index) => (
+          <div key={index} className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+                <Link2 size={18} />
+              </div>
+              <input
+                type="text"
+                value={url}
+                onChange={(e) => updateUrl(index, e.target.value)}
+                placeholder="https://youtube.com/watch?v=..."
+                disabled={isLoading}
+                className="w-full pl-12 pr-4 py-3 input-modern rounded-xl text-white placeholder-gray-600 focus:outline-none text-sm"
+              />
+            </div>
+            {urls.length > 1 && (
+              <button
+                type="button"
+                onClick={() => removeUrl(index)}
+                className="p-2 text-gray-500 hover:text-red-400 transition-colors"
+                disabled={isLoading}
+              >
+                <X size={16} />
+              </button>
+            )}
           </div>
-          <input
-            type="text"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://youtube.com/watch?v=..."
-            disabled={isLoading}
-            className="w-full pl-12 pr-4 py-4 input-modern rounded-xl text-white placeholder-gray-600 focus:outline-none"
-          />
-          {error && (
-            <p className="absolute -bottom-6 left-0 text-red-400 text-sm">{error}</p>
-          )}
-        </div>
+        ))}
+
+        {error && (
+          <p className="text-red-400 text-sm">{error}</p>
+        )}
+
+        <button
+          type="button"
+          onClick={addUrl}
+          disabled={isLoading}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-dashed border-gray-700 hover:border-gray-500 text-gray-400 hover:text-white rounded-xl transition-colors text-sm"
+        >
+          <Plus size={16} />
+          Add another URL
+        </button>
 
         <button
           type="submit"
